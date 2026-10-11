@@ -47,13 +47,19 @@ jobs:
         id: release
         shell: bash
         run: |
-          if ! gh release view "$RELEASE_TAG" --json isDraft > release.json; then
+          find_release() {
+            gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" | \
+              jq --arg tag "$RELEASE_TAG" '[.[][] | select(.tag_name == $tag)] | first // null'
+          }
+          find_release > release.json
+          if ! jq -e . release.json > /dev/null; then
             options=()
             if [[ "$RELEASE_TAG" == *-* ]]; then options+=(--prerelease); fi
             gh release create "$RELEASE_TAG" --verify-tag --draft \
               --title "VK Backup ${RELEASE_TAG#v}" --notes-file .github/release-notes.md "${options[@]}"
+            find_release > release.json
           fi
-          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > release.json
+          jq -e '.id and (.draft | type == "boolean")' release.json > /dev/null
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "release_id=$(jq -r .id release.json)" >> "$GITHUB_OUTPUT"
