@@ -105,9 +105,9 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [token, setToken] = useState("");
   const [clientId, setClientId] = useState(
-    localStorage.getItem("vk-backup-client") ??
-      import.meta.env.VITE_VK_CLIENT_ID ??
-      "",
+    localStorage.getItem("vk-backup-client") ||
+      import.meta.env.VITE_VK_CLIENT_ID ||
+      "54816594",
   );
   const [mode, setMode] = useState("vkid");
   const [scopes, setScopes] = useState("photos video docs groups wall friends");
