@@ -31,6 +31,9 @@ sha2 = "0.10"
 base64 = "0.22"
 url = "2"
 fs2 = "0.4"
+p256 = { version = "0.13", features = ["ecdh"] }
+hkdf = "0.12"
+aes-gcm = "0.10"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

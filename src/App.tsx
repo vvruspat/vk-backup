@@ -101,6 +101,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [loginTab, setLoginTab] = useState("oauth");
+  const [miniappId, setMiniappId] = useState(
+    localStorage.getItem("vk-backup-miniapp") ||
+      import.meta.env.VITE_VK_MINIAPP_ID ||
+      "54816788",
+  );
+  const [pairCode, setPairCode] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [token, setToken] = useState("");
@@ -185,6 +192,7 @@ export default function App() {
     setToken("");
     setLoginOpen(false);
     setLoginWaiting(false);
+    setPairCode("");
     setConnecting(false);
     setCollections({});
     setSelections({});
@@ -228,6 +236,7 @@ export default function App() {
       listen<{ user?: User; error?: string }>("auth-result", (e) => {
         if (disposed) return;
         setLoginWaiting(false);
+        setPairCode("");
         if (e.payload.user) void connected(e.payload.user);
         else if (e.payload.error !== "Вход отменён.")
           setError(e.payload.error ?? "Не удалось войти в ВК.");
@@ -349,6 +358,7 @@ export default function App() {
     try {
       await backend.cancelLogin();
       setLoginWaiting(false);
+      setPairCode("");
     } catch (e) {
       setError(errorText(e));
     }
@@ -359,6 +369,19 @@ export default function App() {
       if (path) setFolder(path);
     } catch (e) {
       setError(errorText(e));
+    }
+  }
+  async function miniappLogin() {
+    setError(null);
+    setPairCode("");
+    setLoginWaiting(true);
+    localStorage.setItem("vk-backup-miniapp", miniappId);
+    try {
+      const pair = await backend.miniappLogin(miniappId, "photos video groups");
+      setPairCode(pair.pairCode);
+    } catch (e) {
+      setError(errorText(e));
+      setLoginWaiting(false);
     }
   }
   async function start() {
@@ -1156,13 +1179,23 @@ export default function App() {
             <a href="/?demo=1">Открыть демонстрацию</a>
           </p>
         ) : (
-          <Tabs.Root defaultValue="oauth" className="auth-tabs">
+          <Tabs.Root
+            value={loginTab}
+            onValueChange={setLoginTab}
+            className="auth-tabs"
+          >
             <Tabs.List className="tab-list">
               <Tabs.Trigger value="oauth" disabled={loginWaiting || connecting}>
                 Вход через браузер
               </Tabs.Trigger>
               <Tabs.Trigger value="token" disabled={loginWaiting || connecting}>
                 У меня есть токен
+              </Tabs.Trigger>
+              <Tabs.Trigger
+                value="miniapp"
+                disabled={loginWaiting || connecting}
+              >
+                Через Mini App
               </Tabs.Trigger>
             </Tabs.List>
             <Tabs.Content value="oauth">
@@ -1236,6 +1269,63 @@ export default function App() {
                 >
                   <ExternalLink size={17} />
                   Открыть ВК и войти
+                </button>
+              )}
+            </Tabs.Content>
+            <Tabs.Content value="miniapp">
+              <label className="field-label">
+                ID VK Mini App
+                <input
+                  value={miniappId}
+                  onChange={(e) => setMiniappId(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="ID отдельного Mini App"
+                  disabled={loginWaiting}
+                />
+              </label>
+              <div className="setup-note">
+                <Info size={17} />
+                <p>
+                  Mini App откроется внутри ВК. Подтвердите доступ к фото, видео
+                  и группам. Приложение проверит разрешения перед подключением;
+                  при отказе прежний вход сохранится.
+                </p>
+              </div>
+              {loginWaiting ? (
+                <>
+                  <div className="waiting-auth">
+                    <LoaderCircle className="spin" size={20} />
+                    <span>Завершите подключение внутри ВК…</span>
+                    <button
+                      className="button small"
+                      onClick={() => void cancelLogin()}
+                    >
+                      Отменить
+                    </button>
+                  </div>
+                  {pairCode && (
+                    <label className="field-label">
+                      Если Mini App попросит код, скопируйте его отсюда
+                      <input
+                        aria-label="Код подключения Mini App"
+                        readOnly
+                        value={pairCode}
+                        onFocus={(e) => e.target.select()}
+                      />
+                      <small>
+                        Действует пять минут. Токен в код не входит.
+                      </small>
+                    </label>
+                  )}
+                </>
+              ) : (
+                <button
+                  className="button primary full"
+                  disabled={!miniappId || connecting}
+                  onClick={() => void miniappLogin()}
+                >
+                  <ExternalLink size={17} />
+                  Открыть Mini App в ВК
                 </button>
               )}
             </Tabs.Content>
@@ -1314,6 +1404,27 @@ export default function App() {
           </button>
         </div>
         <div className="settings-info">
+          {native && (
+            <>
+              <h3>Доступ к фото и сообществам</h3>
+              <p>
+                Можно подключиться через VK Mini App. Прежняя сессия
+                сохраняется, пока новый доступ не будет проверен.
+              </p>
+              <button
+                className="button"
+                disabled={locked}
+                onClick={() => {
+                  setSettingsOpen(false);
+                  setLoginTab("miniapp");
+                  setError(null);
+                  setLoginOpen(true);
+                }}
+              >
+                Подключить через Mini App
+              </button>
+            </>
+          )}
           <h3>Что входит в архив</h3>
           <p>
             Файлы по альбомам, сведения о сообществах и выбранные данные в JSON.

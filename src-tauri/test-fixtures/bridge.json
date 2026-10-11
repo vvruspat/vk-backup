@@ -1,0 +1,11 @@
+{
+  "note": "WebCrypto interoperability fixture; synthetic key and token only",
+  "privateKey": "GuYUvWvGQnPVdkGZsFSzf9W_clTEhiQWAqzHTlXld9s",
+  "pairId": "1111111111111111111111111111111111111111111111111111111111111111",
+  "envelope": {
+    "version": 1,
+    "publicKey": "BMIqinUk0axbWVwAzPLuCa9DKL1xknOcuMkCmhRo3lcTpZbZZMDPFGAW85m_OeJx17ti4iXjZz3cdweM3oyOR3g",
+    "nonce": "v8JqTE96PEsIreg1",
+    "ciphertext": "IZZnl8oXYlY5LM8Tw0cDqg_mzyk-e99-gdxhI_4HJ5vaCHynpFtE2lvBM2Ef0piHqglNiWDgI11AtAqTIJtFvWF-3UiXlCkecSSSeXal2fn4YLm_MajaKcwhB_3zlMfXVQutqZK9kur3CoKCseC-E9_N0IIQ5UB0kFP3PaTsZGSU4R9T_F4"
+  }
+}

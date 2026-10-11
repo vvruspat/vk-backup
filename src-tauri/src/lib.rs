@@ -1,6 +1,7 @@
 mod api;
 mod auth;
 mod backup;
+mod miniapp;
 mod model;
 #[cfg(test)]
 mod test_support;
@@ -16,6 +17,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             auth::connect_token,
             auth::begin_login,
+            miniapp::begin_miniapp_login,
             auth::cancel_login,
             auth::logout,
             api::sources,

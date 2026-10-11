@@ -36,6 +36,36 @@ services:
       traefik.http.routers.vk-backup-auth.tls.certresolver: letsencrypt
       traefik.http.routers.vk-backup-auth.observability.accesslogs: "false"
       traefik.http.routers.vk-backup-auth-http.observability.accesslogs: "false"
+  bridge:
+    image: node:24-alpine
+    container_name: vk-backup-bridge
+    user: "1000:1000"
+    command: [node, /app/bridge-server.mjs]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 64
+    volumes:
+      - ./bridge-server.mjs:/app/bridge-server.mjs:ro
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8081/bridge/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks: [coolify]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: coolify
+      traefik.http.services.vk-backup-bridge.loadbalancer.server.port: "8081"
+      traefik.http.routers.vk-backup-bridge.rule: Host(`vk-backup.whitesquirrel.digital`) && PathPrefix(`/bridge/`)
+      traefik.http.routers.vk-backup-bridge.priority: "100"
+      traefik.http.routers.vk-backup-bridge.entrypoints: https
+      traefik.http.routers.vk-backup-bridge.service: vk-backup-bridge
+      traefik.http.routers.vk-backup-bridge.tls: "true"
+      traefik.http.routers.vk-backup-bridge.tls.certresolver: letsencrypt
+      traefik.http.routers.vk-backup-bridge.observability.accesslogs: "false"
 networks:
   coolify:
     external: true

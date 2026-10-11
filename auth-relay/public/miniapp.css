@@ -1,0 +1,13 @@
+body { padding: 28px 18px; }
+.card { max-width: 540px; margin: 0 auto; }
+.icon { border-radius: 18px; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; font-weight: 700; color: #1677ff; }
+form { display: grid; gap: 12px; margin: 24px 0; }
+label { font-weight: 600; text-align: left; }
+input { font: inherit; border: 1px solid #d9dfe8; border-radius: 12px; padding: 13px; width: 100%; box-sizing: border-box; }
+button { cursor: pointer; font: inherit; border: 0; border-radius: 12px; padding: 14px 20px; color: #fff; background: #1677ff; width: 100%; }
+button:disabled { opacity: .55; cursor: default; }
+[hidden] { display: none !important; }
+#permissions, #account { color: #25354f; }
+.privacy { font-size: 13px; color: #718096; }
+#status[data-error="true"] { color: #bb3344; }

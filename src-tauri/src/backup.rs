@@ -174,6 +174,9 @@ pub async fn start_backup(
     selections: Vec<Selection>,
     use_ytdlp: bool,
 ) -> Result<Progress, String> {
+    if state.login.lock().await.is_some() {
+        return Err("Завершите или отмените подключение ВК перед началом бэкапа.".into());
+    }
     let mut guard = state.job.lock().await;
     if let Some(job) = guard.as_ref()
         && matches!(

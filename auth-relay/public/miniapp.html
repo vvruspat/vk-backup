@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Подключение VK Backup</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/miniapp.css">
+  <script type="module" src="/miniapp.js"></script>
+</head>
+<body><main class="card">
+  <img class="icon" src="/icon.svg" alt="" width="72" height="72">
+  <p class="eyebrow">VK BACKUP</p>
+  <h1>Ваши файлы — у вас</h1>
+  <p>Подключите ВК к приложению на компьютере. Фото, видео и данные сообществ сохраняются в выбранную вами папку.</p>
+  <form id="pair-form"><label for="pair">Код подключения из VK Backup</label><input id="pair" type="text" autocomplete="off" spellcheck="false" placeholder="Вставьте код из приложения"><button type="submit">Проверить код</button></form>
+  <p id="account"></p><p id="permissions"></p>
+  <button id="connect" hidden disabled>Разрешить доступ и подключить</button>
+  <p id="status" role="status">Открывайте эту страницу внутри VK Mini Apps.</p>
+  <p class="privacy">Токен шифруется для вашего компьютера. Сервер хранит только зашифрованный ответ до получения, не более пяти минут.</p>
+</main></body></html>

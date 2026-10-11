@@ -81,6 +81,16 @@ async fn establish(
     token: String,
     refresh: Option<Refresh>,
 ) -> Result<User, String> {
+    establish_for(state, token, refresh, None, None).await
+}
+
+pub(crate) async fn establish_for(
+    state: &AppState,
+    token: String,
+    refresh: Option<Refresh>,
+    expected_user: Option<i64>,
+    canceled: Option<&AtomicBool>,
+) -> Result<User, String> {
     let profile = api::call_token(
         state,
         &token,
@@ -96,6 +106,11 @@ async fn establish(
     if id <= 0 {
         return Err("ВК не вернул ваш профиль. Проверьте тип токена.".into());
     }
+    if expected_user.is_some_and(|expected| expected != id) {
+        return Err(
+            "Токен относится к другому аккаунту ВК. Повторите подключение нужного аккаунта.".into(),
+        );
+    }
     let user = User {
         id,
         name: format!(
@@ -105,11 +120,16 @@ async fn establish(
         ),
         avatar: p["photo_200"].as_str().map(str::to_string),
     };
-    *state.session.write().await = Some(Session {
+    let mut session = state.session.write().await;
+    if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return Err("Вход отменён.".into());
+    }
+    *session = Some(Session {
         token,
         user: user.clone(),
         refresh,
     });
+    drop(session);
     state.sources.write().await.clear();
     state.collections.write().await.clear();
     Ok(user)
