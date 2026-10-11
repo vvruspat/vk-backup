@@ -1,0 +1,41 @@
+name: vk-backup-auth
+services:
+  relay:
+    image: nginx:1.28-alpine
+    container_name: vk-backup-auth
+    user: "101:101"
+    command: [nginx, -c, /etc/nginx/vk-backup.conf, -g, "daemon off;"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/vk-backup.conf:ro
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks: [coolify]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: coolify
+      traefik.http.services.vk-backup-auth.loadbalancer.server.port: "8080"
+      traefik.http.routers.vk-backup-auth-http.rule: Host(`vk-backup.whitesquirrel.digital`)
+      traefik.http.routers.vk-backup-auth-http.entrypoints: http
+      traefik.http.routers.vk-backup-auth-http.service: vk-backup-auth
+      traefik.http.routers.vk-backup-auth-http.middlewares: vk-backup-auth-https
+      traefik.http.middlewares.vk-backup-auth-https.redirectscheme.scheme: https
+      traefik.http.routers.vk-backup-auth.rule: Host(`vk-backup.whitesquirrel.digital`)
+      traefik.http.routers.vk-backup-auth.entrypoints: https
+      traefik.http.routers.vk-backup-auth.service: vk-backup-auth
+      traefik.http.routers.vk-backup-auth.tls: "true"
+      traefik.http.routers.vk-backup-auth.tls.certresolver: letsencrypt
+      traefik.http.routers.vk-backup-auth.observability.accesslogs: "false"
+      traefik.http.routers.vk-backup-auth-http.observability.accesslogs: "false"
+networks:
+  coolify:
+    external: true

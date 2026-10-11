@@ -17,7 +17,37 @@ use tokio::{
 };
 use url::Url;
 
-pub const REDIRECT: &str = "http://127.0.0.1:47851/callback";
+pub const REDIRECT: &str = "https://vk-backup.whitesquirrel.digital/callback";
+pub const LOOPBACK_REDIRECT: &str = "http://127.0.0.1:47851/callback";
+
+fn authorize_url(client: &str, legacy: bool, scopes: &str, nonce: &str, verifier: &str) -> Url {
+    let mut url = Url::parse(if legacy {
+        "https://oauth.vk.com/authorize"
+    } else {
+        "https://id.vk.com/authorize"
+    })
+    .unwrap();
+    url.query_pairs_mut().extend_pairs([
+        ("client_id", client),
+        (
+            "redirect_uri",
+            if legacy { LOOPBACK_REDIRECT } else { REDIRECT },
+        ),
+        ("state", nonce),
+        ("response_type", if legacy { "token" } else { "code" }),
+        ("scope", scopes),
+    ]);
+    if legacy {
+        url.query_pairs_mut().append_pair("display", "page");
+    } else {
+        let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+        url.query_pairs_mut().extend_pairs([
+            ("code_challenge", challenge.as_str()),
+            ("code_challenge_method", "s256"),
+        ]);
+    }
+    url
+}
 
 pub fn parse_token(input: &str) -> Result<String, String> {
     let value = input.trim();
@@ -188,29 +218,8 @@ pub async fn begin_login(
         uuid::Uuid::new_v4().simple(),
         uuid::Uuid::new_v4().simple()
     );
-    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
     let legacy = mode == "legacy";
-    let mut url = Url::parse(if legacy {
-        "https://oauth.vk.com/authorize"
-    } else {
-        "https://id.vk.com/authorize"
-    })
-    .unwrap();
-    url.query_pairs_mut().extend_pairs([
-        ("client_id", client_id.as_str()),
-        ("redirect_uri", REDIRECT),
-        ("state", nonce.as_str()),
-        ("response_type", if legacy { "token" } else { "code" }),
-        ("scope", scopes.as_str()),
-    ]);
-    if legacy {
-        url.query_pairs_mut().append_pair("display", "page");
-    } else {
-        url.query_pairs_mut().extend_pairs([
-            ("code_challenge", challenge.as_str()),
-            ("code_challenge_method", "s256"),
-        ]);
-    }
+    let url = authorize_url(&client_id, legacy, &scopes, &nonce, &verifier);
     if app.opener().open_url(url.as_str(), None::<&str>).is_err() {
         *state.login.lock().await = None;
         return Err("Не удалось открыть браузер.".into());
@@ -422,6 +431,24 @@ pub async fn logout(state: State<'_, AppState>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn vkid_authorization_uses_public_redirect_and_pkce() {
+        let verifier = "verifier";
+        let url = authorize_url("123", false, "photos video groups", "nonce", verifier);
+        let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(params["redirect_uri"], REDIRECT);
+        assert_eq!(params["response_type"], "code");
+        assert_eq!(params["scope"], "photos video groups");
+        assert_eq!(params["state"], "nonce");
+        assert_eq!(
+            params["code_challenge"],
+            URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
+        );
+        let legacy = authorize_url("123", true, "photos,video", "nonce", verifier);
+        let params: std::collections::HashMap<_, _> = legacy.query_pairs().into_owned().collect();
+        assert_eq!(params["redirect_uri"], LOOPBACK_REDIRECT);
+        assert!(!params.contains_key("code_challenge"));
+    }
     #[test]
     fn token_can_be_pasted_from_redirect_without_retaining_url() {
         assert_eq!(parse_token("https://oauth.vk.com/blank.html#access_token=abcdefghijklmnopqrstuvwxyz&expires_in=1").unwrap(), "abcdefghijklmnopqrstuvwxyz");

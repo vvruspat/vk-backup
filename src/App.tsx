@@ -1188,9 +1188,13 @@ export default function App() {
                 <Info size={17} />
                 <p>
                   Для вашего приложения укажите адрес возврата:
-                  <code>http://127.0.0.1:47851/callback</code>VK ID может не
-                  предоставить права на медиа. Если это произошло, подключите
-                  пользовательский токен VK API.
+                  <code>
+                    {mode === "legacy"
+                      ? "http://127.0.0.1:47851/callback"
+                      : "https://vk-backup.whitesquirrel.digital/callback"}
+                  </code>
+                  VK ID может не предоставить права на медиа. Если это
+                  произошло, подключите пользовательский токен VK API.
                 </p>
               </div>
               <details className="scope-details">
