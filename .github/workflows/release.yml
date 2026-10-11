@@ -129,7 +129,7 @@ jobs:
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseDraft: ${{ needs.prepare.outputs.draft }}
           tauriScript: npm run tauri
-          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --locked
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
           releaseAssetNamePattern: vk-backup_[version]_[platform]_[arch][setup][ext]
           uploadUpdaterJson: false
 
