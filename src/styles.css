@@ -1292,26 +1292,8 @@ h1 {
 .modal-heading .icon-button {
   align-self: start;
 }
-.tab-list {
-  display: flex;
-  background: #f2f5fa;
-  padding: 4px;
-  border-radius: 8px;
-  gap: 3px;
-  margin-bottom: 23px;
-}
-.tab-list button {
-  flex: 1;
-  padding: 10px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  color: #7f94b2;
-  font-weight: 550;
-}
-.tab-list button[data-state="active"] {
-  background: white;
-  color: #457fc4;
-  box-shadow: 0 2px 4px #1c44610b;
+.login-modal {
+  width: 420px;
 }
 .field-label {
   font-size: 11px;
@@ -1370,19 +1352,13 @@ h1 {
   margin: 7px 0;
   overflow-wrap: anywhere;
 }
-.scope-details {
+.pairing-help {
   font-size: 10px;
   color: #7e98bc;
   margin-top: 19px;
 }
-.scope-details summary {
+.pairing-help summary {
   cursor: pointer;
-}
-.scope-details small {
-  font-size: 9px;
-  line-height: 1.7;
-  display: block;
-  margin-top: 8px;
 }
 .muted {
   font-size: 11px;

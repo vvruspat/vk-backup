@@ -154,8 +154,6 @@ export const backend = {
     });
     return typeof selected === "string" ? selected : null;
   },
-  login: async (clientId: string, mode: string, scopes: string) =>
-    invoke<void>("begin_login", { clientId, mode, scopes }),
   miniappLogin: async (appId: string, scopes: string) =>
     invoke<{ pairCode: string; expiresAt: number }>("begin_miniapp_login", {
       appId,

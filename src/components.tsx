@@ -84,6 +84,7 @@ export function Modal({
   description,
   children,
   wide = false,
+  className = "",
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -91,12 +92,13 @@ export function Modal({
   description: string;
   children: ReactNode;
   wide?: boolean;
+  className?: string;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="modal-overlay" />
-        <Dialog.Content className={`modal ${wide ? "wide" : ""}`}>
+        <Dialog.Content className={`modal ${wide ? "wide" : ""} ${className}`}>
           <div className="modal-heading">
             <div>
               <Dialog.Title>{title}</Dialog.Title>

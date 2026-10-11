@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as Tabs from "@radix-ui/react-tabs";
 import { listen } from "@tauri-apps/api/event";
 import {
   Archive,
@@ -85,6 +84,7 @@ const errorText = (e: unknown) =>
     : e instanceof Error
       ? e.message
       : "Не удалось выполнить действие. Попробуйте ещё раз.";
+const miniappId = import.meta.env.VITE_VK_MINIAPP_ID || "54816788";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -101,25 +101,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
-  const [loginTab, setLoginTab] = useState("oauth");
-  const [miniappId, setMiniappId] = useState(
-    localStorage.getItem("vk-backup-miniapp") ||
-      import.meta.env.VITE_VK_MINIAPP_ID ||
-      "54816788",
-  );
   const [pairCode, setPairCode] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [token, setToken] = useState("");
-  const [clientId, setClientId] = useState(
-    localStorage.getItem("vk-backup-client") ||
-      import.meta.env.VITE_VK_CLIENT_ID ||
-      "54816594",
-  );
-  const [mode, setMode] = useState("vkid");
-  const [scopes, setScopes] = useState("photos video docs groups wall friends");
   const [loginWaiting, setLoginWaiting] = useState(false);
-  const [connecting, setConnecting] = useState(false);
   const [folder, setFolder] = useState<string | null>(null);
   const [useYtdlp, setUseYtdlp] = useState(
     localStorage.getItem("vk-backup-ytdlp") === "on",
@@ -189,11 +174,9 @@ export default function App() {
 
   async function connected(u: User) {
     setUser(u);
-    setToken("");
     setLoginOpen(false);
     setLoginWaiting(false);
     setPairCode("");
-    setConnecting(false);
     setCollections({});
     setSelections({});
     setLoading(true);
@@ -328,32 +311,6 @@ export default function App() {
     }
   }
 
-  async function connectToken() {
-    setConnecting(true);
-    setError(null);
-    try {
-      await connected(await backend.connect(token));
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setConnecting(false);
-    }
-  }
-  async function login() {
-    setError(null);
-    setLoginWaiting(true);
-    localStorage.setItem("vk-backup-client", clientId);
-    try {
-      await backend.login(
-        clientId,
-        mode,
-        mode === "legacy" ? scopes.replace(/ +/g, ",") : scopes,
-      );
-    } catch (e) {
-      setError(errorText(e));
-      setLoginWaiting(false);
-    }
-  }
   async function cancelLogin() {
     try {
       await backend.cancelLogin();
@@ -375,7 +332,6 @@ export default function App() {
     setError(null);
     setPairCode("");
     setLoginWaiting(true);
-    localStorage.setItem("vk-backup-miniapp", miniappId);
     try {
       const pair = await backend.miniappLogin(miniappId, "photos video groups");
       setPairCode(pair.pairCode);
@@ -1158,14 +1114,13 @@ export default function App() {
 
       <Modal
         open={loginOpen}
-        onOpenChange={(v) => {
-          if (!connecting) {
-            setLoginOpen(v);
-            if (!v && loginWaiting) void cancelLogin();
-          }
+        onOpenChange={(open) => {
+          setLoginOpen(open);
+          if (!open && loginWaiting) void cancelLogin();
         }}
-        title="Подключить аккаунт ВК"
-        description="Авторизация нужна для чтения ваших альбомов и списка сообществ."
+        title="Войти в ВК"
+        description="ВК откроется в браузере. Подтвердите доступ к фото, видео и вашим сообществам."
+        className="login-modal"
       >
         {error && (
           <div className="notice error" role="alert">
@@ -1174,196 +1129,49 @@ export default function App() {
           </div>
         )}
         {!native ? (
-          <p>
-            Для подключения ВК запустите десктопное приложение.{" "}
+          <p className="muted">
+            Для входа запустите приложение на компьютере.{" "}
             <a href="/?demo=1">Открыть демонстрацию</a>
           </p>
-        ) : (
-          <Tabs.Root
-            value={loginTab}
-            onValueChange={setLoginTab}
-            className="auth-tabs"
-          >
-            <Tabs.List className="tab-list">
-              <Tabs.Trigger value="oauth" disabled={loginWaiting || connecting}>
-                Вход через браузер
-              </Tabs.Trigger>
-              <Tabs.Trigger value="token" disabled={loginWaiting || connecting}>
-                У меня есть токен
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="miniapp"
-                disabled={loginWaiting || connecting}
+        ) : loginWaiting ? (
+          <>
+            <div className="waiting-auth" role="status">
+              <LoaderCircle className="spin" size={20} />
+              <span>Завершите вход в окне ВК…</span>
+              <button
+                className="button small"
+                onClick={() => void cancelLogin()}
               >
-                Через Mini App
-              </Tabs.Trigger>
-            </Tabs.List>
-            <Tabs.Content value="oauth">
-              <label className="field-label">
-                ID приложения ВК
-                <input
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  placeholder="Например, 12345678"
-                  inputMode="numeric"
-                  disabled={loginWaiting}
-                />
-              </label>
-              <label className="field-label">
-                Способ входа
-                <select
-                  value={mode}
-                  disabled={loginWaiting}
-                  onChange={(e) => setMode(e.target.value)}
-                >
-                  <option value="vkid">VK ID · OAuth 2.1 / PKCE</option>
-                  <option value="legacy">
-                    VK API · существующее Standalone-приложение
-                  </option>
-                </select>
-              </label>
-              <div className="setup-note">
-                <Info size={17} />
-                <p>
-                  Для вашего приложения укажите адрес возврата:
-                  <code>
-                    {mode === "legacy"
-                      ? "http://127.0.0.1:47851/callback"
-                      : "https://vk-backup.whitesquirrel.digital/callback"}
-                  </code>
-                  VK ID может не предоставить права на медиа. Если это
-                  произошло, подключите пользовательский токен VK API.
-                </p>
-              </div>
-              <details className="scope-details">
-                <summary>Запрашиваемые права</summary>
+                Отменить
+              </button>
+            </div>
+            {pairCode && (
+              <details className="pairing-help">
+                <summary>ВК попросил код подключения?</summary>
                 <label className="field-label">
+                  Скопируйте этот код в окно ВК
                   <input
-                    aria-label="Права приложения ВК"
-                    value={scopes}
-                    disabled={loginWaiting}
-                    onChange={(e) => setScopes(e.target.value)}
+                    aria-label="Код подключения ВК"
+                    readOnly
+                    value={pairCode}
+                    onFocus={(e) => e.target.select()}
                   />
                 </label>
-                <small>
-                  Для переписки нужен дополнительный доступ messages.
-                  Возможность выдачи прав зависит от типа приложения ВК.
-                </small>
               </details>
-              {loginWaiting ? (
-                <div className="waiting-auth">
-                  <LoaderCircle className="spin" size={20} />
-                  <span>Завершите вход в браузере…</span>
-                  <button
-                    className="button small"
-                    onClick={() => void cancelLogin()}
-                  >
-                    Отменить
-                  </button>
-                </div>
-              ) : (
-                <button
-                  className="button primary full"
-                  disabled={!clientId || connecting}
-                  onClick={() => void login()}
-                >
-                  <ExternalLink size={17} />
-                  Открыть ВК и войти
-                </button>
-              )}
-            </Tabs.Content>
-            <Tabs.Content value="miniapp">
-              <label className="field-label">
-                ID VK Mini App
-                <input
-                  value={miniappId}
-                  onChange={(e) => setMiniappId(e.target.value)}
-                  inputMode="numeric"
-                  placeholder="ID отдельного Mini App"
-                  disabled={loginWaiting}
-                />
-              </label>
-              <div className="setup-note">
-                <Info size={17} />
-                <p>
-                  Mini App откроется внутри ВК. Подтвердите доступ к фото, видео
-                  и группам. Приложение проверит разрешения перед подключением;
-                  при отказе прежний вход сохранится.
-                </p>
-              </div>
-              {loginWaiting ? (
-                <>
-                  <div className="waiting-auth">
-                    <LoaderCircle className="spin" size={20} />
-                    <span>Завершите подключение внутри ВК…</span>
-                    <button
-                      className="button small"
-                      onClick={() => void cancelLogin()}
-                    >
-                      Отменить
-                    </button>
-                  </div>
-                  {pairCode && (
-                    <label className="field-label">
-                      Если Mini App попросит код, скопируйте его отсюда
-                      <input
-                        aria-label="Код подключения Mini App"
-                        readOnly
-                        value={pairCode}
-                        onFocus={(e) => e.target.select()}
-                      />
-                      <small>
-                        Действует пять минут. Токен в код не входит.
-                      </small>
-                    </label>
-                  )}
-                </>
-              ) : (
-                <button
-                  className="button primary full"
-                  disabled={!miniappId || connecting}
-                  onClick={() => void miniappLogin()}
-                >
-                  <ExternalLink size={17} />
-                  Открыть Mini App в ВК
-                </button>
-              )}
-            </Tabs.Content>
-            <Tabs.Content value="token">
-              <p className="muted">
-                Нужен пользовательский токен с правами photos, video, docs и
-                groups. Сервисный ключ и токен сообщества не подойдут.
-              </p>
-              <label className="field-label">
-                Токен или ссылка после авторизации
-                <textarea
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="vk1.a.… или ссылка с access_token"
-                  rows={4}
-                  disabled={connecting}
-                />
-              </label>
-              <button
-                className="button primary full"
-                disabled={!token.trim() || connecting}
-                onClick={() => void connectToken()}
-              >
-                {connecting ? (
-                  <LoaderCircle className="spin" size={17} />
-                ) : (
-                  <LockKeyhole size={17} />
-                )}
-                Подключить аккаунт
-              </button>
-            </Tabs.Content>
-          </Tabs.Root>
+            )}
+          </>
+        ) : (
+          <button
+            className="button primary full"
+            onClick={() => void miniappLogin()}
+          >
+            <ExternalLink size={17} />
+            Войти через ВК
+          </button>
         )}
         <p className="auth-privacy">
           <ShieldCheck size={15} />
-          Токен хранится только в памяти до закрытия приложения.
+          Пароль вводится только на стороне ВК.
         </p>
       </Modal>
 
@@ -1406,22 +1214,18 @@ export default function App() {
         <div className="settings-info">
           {native && (
             <>
-              <h3>Доступ к фото и сообществам</h3>
-              <p>
-                Можно подключиться через VK Mini App. Прежняя сессия
-                сохраняется, пока новый доступ не будет проверен.
-              </p>
+              <h3>Аккаунт ВК</h3>
+              <p>Повторите вход, если нужно обновить доступ к вашим данным.</p>
               <button
                 className="button"
                 disabled={locked}
                 onClick={() => {
                   setSettingsOpen(false);
-                  setLoginTab("miniapp");
                   setError(null);
                   setLoginOpen(true);
                 }}
               >
-                Подключить через Mini App
+                Переподключить ВК
               </button>
             </>
           )}
@@ -1452,8 +1256,7 @@ export default function App() {
             <div>
               <h3>Подключите ВК</h3>
               <p>
-                Войдите через своё приложение ВК или вставьте пользовательский
-                токен. Права каждого раздела проверяются отдельно.
+                Нажмите «Войти через ВК» и подтвердите доступ в браузере.
               </p>
             </div>
           </li>
