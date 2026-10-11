@@ -65,8 +65,9 @@ pub async fn call_token(
                 3 => "Этот метод недоступен для вашего приложения ВК.",
                 _ => "ВК отклонил запрос.",
             };
-            // Raw VK errors include request_params containing the access token.
-            return Err(format!("{method}: {explanation} (код {code})"));
+            // Never serialize the raw error: request_params contains the token.
+            let detail = error_detail(error, token);
+            return Err(format!("{method}: {explanation} (код {code}){detail}"));
         }
         return body
             .get("response")
@@ -76,6 +77,61 @@ pub async fn call_token(
     Err(format!(
         "{method}: ВК временно ограничил запросы. Повторите позже."
     ))
+}
+
+fn error_detail(error: &Value, token: &str) -> String {
+    let Some(message) = error["error_msg"].as_str() else {
+        return String::new();
+    };
+    let mut message = message.replace(token, "[скрыто]");
+    let encoded: String = url::form_urlencoded::byte_serialize(token.as_bytes()).collect();
+    message = message.replace(&encoded, "[скрыто]");
+    let keys = [
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "client_secret",
+        "code_verifier",
+        "access_key",
+    ];
+    if let Some(params) = error["request_params"].as_array() {
+        for param in params {
+            if keys.contains(&param["key"].as_str().unwrap_or(""))
+                && let Some(value) = param["value"].as_str().filter(|v| !v.is_empty())
+            {
+                message = message.replace(value, "[скрыто]");
+            }
+        }
+    }
+    // Do not expose credential-bearing parameter dumps or signed URLs in messages.
+    if keys.iter().any(|key| message.to_lowercase().contains(key)) {
+        return String::new();
+    }
+    let clean = message
+        .split_whitespace()
+        .map(|word| {
+            if word.contains("://")
+                || word.contains("vk1.")
+                || word.contains("vk2.")
+                || word.len() > 80
+            {
+                "[скрыто]"
+            } else {
+                word
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let clean: String = clean
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(300)
+        .collect();
+    if clean.is_empty() {
+        String::new()
+    } else {
+        format!(" Ответ ВК: {clean}")
+    }
 }
 
 pub fn text(value: &Value, key: &str) -> String {
@@ -678,6 +734,24 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("код 15"));
         assert!(!error.contains("secret-test-token"));
+    }
+    #[tokio::test]
+    async fn unknown_error_keeps_provider_reason_without_credentials() {
+        let (address, _) = crate::test_support::json_server(vec![json!({"error":{
+            "error_code":1051,
+            "error_msg":"Method is unavailable with this token. secret-test-token https://vk.com/?hash=signed-secret",
+            "request_params":[{"key":"access_token","value":"secret-test-token"}]
+        }})]).await;
+        let mut state = AppState::new();
+        state.api_base = address;
+        let error = call_token(&state, "secret-test-token", "photos.getAlbums", &[])
+            .await
+            .unwrap_err();
+        assert!(error.contains("код 1051"));
+        assert!(error.contains("Method is unavailable with this token."));
+        assert!(!error.contains("secret-test-token"));
+        assert!(!error.contains("signed-secret"));
+        assert!(!error.contains("request_params"));
     }
     #[test]
     fn largest_image_and_video_quality() {

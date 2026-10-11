@@ -114,7 +114,9 @@ export default function App() {
   const [loginWaiting, setLoginWaiting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [folder, setFolder] = useState<string | null>(null);
-  const [useYtdlp, setUseYtdlp] = useState(false);
+  const [useYtdlp, setUseYtdlp] = useState(
+    localStorage.getItem("vk-backup-ytdlp") === "on",
+  );
   const [hasYtdlp, setHasYtdlp] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [starting, setStarting] = useState(false);
@@ -215,7 +217,10 @@ export default function App() {
         .then(add)
         .catch((e) => setError(errorText(e)));
       backend.tools().then((v) => {
-        if (!disposed) setHasYtdlp(v);
+        if (!disposed) {
+          setHasYtdlp(v);
+          if (localStorage.getItem("vk-backup-ytdlp") === null) setUseYtdlp(v);
+        }
       });
     }
     if (native) {
@@ -889,7 +894,7 @@ export default function App() {
                                 ? c.kind === "photos"
                                   ? "Оригинальный размер"
                                   : c.description
-                                : "Нужны права приложения ВК"}
+                                : "ВК не разрешил доступ к разделу"}
                             </small>
                           </div>
                           {c.available ? (
@@ -1289,7 +1294,10 @@ export default function App() {
           <CheckBox
             label="Использовать yt-dlp для видео"
             checked={useYtdlp}
-            onChange={setUseYtdlp}
+            onChange={(enabled) => {
+              setUseYtdlp(enabled);
+              localStorage.setItem("vk-backup-ytdlp", enabled ? "on" : "off");
+            }}
             disabled={busy}
           />
         </div>
@@ -1452,7 +1460,9 @@ export default function App() {
                   {m.reason && (
                     <span className="media-warning" title={m.reason}>
                       <Info size={14} />
-                      Прямой файл недоступен
+                      {preview.kind === "videos" && useYtdlp && hasYtdlp
+                        ? "Скачивание через видеостраницу"
+                        : "Прямой файл недоступен"}
                     </span>
                   )}
                 </label>

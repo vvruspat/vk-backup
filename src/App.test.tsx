@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   start: vi.fn(),
   items: vi.fn(),
   catalog: vi.fn(),
+  tools: vi.fn().mockResolvedValue(false),
 }));
 vi.mock("./bridge", () => {
   const make = (ownerId: number): Collection[] => [
@@ -50,7 +51,7 @@ vi.mock("./bridge", () => {
           nextOffset: offset === 0 ? 2 : null,
         }),
       ),
-      tools: async () => false,
+      tools: mocks.tools,
       progress: async () => () => {},
       folder: async () => "/test/backup",
       start: mocks.start.mockImplementation(
@@ -84,6 +85,28 @@ vi.mock("./bridge", () => {
 import App from "./App";
 
 describe("backup selection", () => {
+  it("enables the installed video downloader automatically and respects an explicit opt-out", async () => {
+    const user = userEvent.setup();
+    localStorage.removeItem("vk-backup-ytdlp");
+    mocks.tools.mockResolvedValue(true);
+    const view = render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Настройки" }));
+    const option = screen.getByRole("checkbox", {
+      name: "Использовать yt-dlp для видео",
+    });
+    await waitFor(() => expect(option).toBeChecked());
+    await user.click(option);
+    expect(localStorage.getItem("vk-backup-ytdlp")).toBe("off");
+    view.unmount();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Настройки" }));
+    await screen.findByText("yt-dlp найден на компьютере");
+    expect(
+      screen.getByRole("checkbox", { name: "Использовать yt-dlp для видео" }),
+    ).not.toBeChecked();
+    localStorage.removeItem("vk-backup-ytdlp");
+    mocks.tools.mockResolvedValue(false);
+  });
   it("excludes one photo from all pages and keeps a second community in the same job", async () => {
     const user = userEvent.setup();
     render(<App />);

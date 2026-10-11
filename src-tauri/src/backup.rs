@@ -472,8 +472,15 @@ async fn run(
                     }
                     result
                 } else if task.collection.kind == Kind::Videos && use_ytdlp {
-                    let url = media.player.clone().unwrap_or_else(|| format!("https://vk.com/video{}", media.id));
-                    ytdlp(app, job, root, &task.relative, &url).await
+                    let mut result = Err("Не удалось получить видео.".into());
+                    // The API's signed embed player can reject extraction while the
+                    // normal page for the same video works. Prefer the normal page.
+                    for url in video_pages(media) {
+                        checkpoint(job).await?;
+                        result = ytdlp(app, job, root, &task.relative, &url).await;
+                        if result.is_ok() || job.canceled.load(Ordering::Relaxed) { break; }
+                    }
+                    result
                 } else {
                     let error = "ВК не предоставил файл. Для видео можно включить yt-dlp и повторить бэкап.".to_string();
                     job.progress.lock().await.unavailable += 1;
@@ -785,6 +792,47 @@ async fn write_gallery(root: &Path, manifest: &Manifest) -> Result<(), String> {
     write_atomic(root, Path::new("index.html"), content.as_bytes()).await
 }
 
+fn video_pages(media: &Media) -> Vec<String> {
+    let access = api::text(&media.raw, "access_key");
+    let mut page = format!("https://vk.com/video{}", media.id);
+    if !access.is_empty() {
+        page.push('_');
+        page.push_str(&access);
+    }
+    let mut pages = vec![page];
+    if let Some(player) = &media.player
+        && !pages.contains(player)
+    {
+        pages.push(player.clone());
+    }
+    pages
+}
+
+fn ytdlp_error(message: &str) -> String {
+    let message = message.to_lowercase();
+    let detail = if message.contains("requested format is not available") {
+        "ВК не предоставил готовый MP4 для этого видео."
+    } else if message.contains("login")
+        || message.contains("sign in")
+        || message.contains("private")
+    {
+        "Видео требует отдельного входа на сайте ВК. Токен VK ID не является сессией видеоплеера."
+    } else if message.contains("captcha") {
+        "ВК запросил капчу для видеоплеера. Откройте видео в браузере."
+    } else if message.contains("404")
+        || message.contains("does not exist")
+        || message.contains("removed")
+    {
+        "Видео удалено или недоступно по ссылке."
+    } else if message.contains("403") || message.contains("access denied") {
+        "ВК отказал в доступе к файлу видео."
+    } else {
+        "Не удалось получить видео. Обновите yt-dlp; для приватного видео может потребоваться отдельный вход."
+    };
+    // Extractor stderr can contain signed URLs. Only return a fixed explanation.
+    format!("yt-dlp: {detail}")
+}
+
 fn ytdlp_command() -> Command {
     #[cfg(target_os = "macos")]
     let program = if Path::new("/opt/homebrew/bin/yt-dlp").is_file() {
@@ -831,16 +879,30 @@ async fn ytdlp(
         let mut child = ytdlp_command()
             .args(["--ignore-config", "--no-playlist", "--no-cache-dir", "--newline", "--no-warnings", "--socket-timeout", "20", "--retries", "2", "--format", "best[ext=mp4]", "--progress-template", "download:%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s", "--output"])
             .arg(staging.join("video.mp4")).arg("--").arg(url)
-            .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).kill_on_drop(true)
+            .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).kill_on_drop(true)
             .spawn().map_err(|_| "yt-dlp не найден. Установите его и повторите бэкап.")?;
+        let stderr = child.stderr.take().ok_or("Не удалось читать результат yt-dlp.")?;
+        let errors = tokio::spawn(async move {
+            let mut lines = BufReader::new(stderr).lines();
+            let mut tail = String::new();
+            while let Ok(Some(line)) = lines.next_line().await {
+                tail.push_str(&line);
+                tail.push('\n');
+                if tail.len() > 8192 {
+                    tail = tail.chars().rev().take(4096).collect::<String>().chars().rev().collect();
+                }
+            }
+            tail
+        });
         let mut lines = BufReader::new(child.stdout.take().ok_or("Не удалось читать прогресс yt-dlp.")?).lines();
         let mut restart = false;
         loop {
-            if job.canceled.load(Ordering::Relaxed) { let _ = child.kill().await; return Err("Бэкап отменён.".into()); }
+            if job.canceled.load(Ordering::Relaxed) { let _ = child.kill().await; errors.abort(); return Err("Бэкап отменён.".into()); }
             // Pausing a subprocess portably means stopping the current video and restarting
             // it after resume. yt-dlp resumes its partial download in the staging directory.
             if job.paused.load(Ordering::Relaxed) {
                 let _ = child.kill().await;
+                errors.abort();
                 checkpoint(job).await?;
                 restart = true;
                 break;
@@ -855,7 +917,9 @@ async fn ytdlp(
             }
         }
         if restart { continue; }
-        if !child.wait().await.map_err(|_| "Не удалось дождаться yt-dlp.")?.success() { return Err("yt-dlp не смог получить видео. Оно может требовать отдельный доступ или не поддерживать MP4.".into()); }
+        let success = child.wait().await.map_err(|_| "Не удалось дождаться yt-dlp.")?.success();
+        let errors = errors.await.unwrap_or_default();
+        if !success { return Err(ytdlp_error(&errors)); }
         let file = staging.join("video.mp4");
         if fs::metadata(&file).await.map_err(io_error)?.len() == 0 { return Err("yt-dlp вернул пустой файл.".into()); }
         return replace(&file, &target).await;
@@ -943,6 +1007,23 @@ pub async fn open_backup_folder(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn video_extraction_prefers_normal_page_and_keeps_private_key() {
+        let mut media: Media = serde_json::from_value(json!({
+            "id":"123_456", "title":"Video", "downloadable":false
+        }))
+        .unwrap();
+        media.player = Some("https://vk.com/video_ext.php?oid=123&id=456&hash=signed".into());
+        media.raw = json!({"access_key":"private-key"});
+        let pages = video_pages(&media);
+        assert_eq!(pages[0], "https://vk.com/video123_456_private-key");
+        assert_eq!(pages[1], media.player.clone().unwrap());
+        assert!(
+            !ytdlp_error("ERROR: HTTP Error 403 https://vk.com/?hash=signed").contains("signed")
+        );
+        assert!(ytdlp_error("ERROR: HTTP Error 403").contains("отказал"));
+    }
     fn job() -> Job {
         Job {
             progress: tokio::sync::Mutex::new(Progress {
