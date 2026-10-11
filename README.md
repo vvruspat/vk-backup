@@ -40,7 +40,7 @@ RUSTUP_HOME="$PWD/.toolchain" rustup component add rustfmt clippy
 RUSTUP_HOME="$PWD/.toolchain" cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-В `.github/workflows/desktop.yml` настроены проверки и сборки для macOS, Windows и Linux. Эти сборки становятся артефактами CI, а не публичными релизами. Windows и Linux требуют проверки на соответствующих платформах; локально проверена macOS Apple Silicon. Приложение для macOS пока без подписи разработчика и нотариализации.
+В `.github/workflows/desktop.yml` настроены проверки для macOS, Windows и Ubuntu, в `.github/workflows/release.yml` — установщики и публикация релизов. Локально проверена macOS Apple Silicon; сборка и тесты Windows/Linux выполняются в GitHub Actions. Запуск интерфейса и скачивание медиа на Windows/Linux требуют отдельной проверки на этих системах.
 
 ## Подключение ВК
 
